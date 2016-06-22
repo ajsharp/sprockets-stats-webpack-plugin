@@ -4,10 +4,12 @@
 
 var walk = require('walk');
 var path = require('path');
-var crypto = require('crypto');
 var CustomStats = require('webpack-custom-stats-patch');
 var fs = require('fs');
 var _merge = require('lodash.merge');
+
+var getDigestAndSizeForAssets = require('./lib/getDigestAndSizeForAssets');
+var getLogicalPathForAssets = require('./lib/getLogicalPathForAssets');
 
 var DEFAULT_PARAMS = {
   customStatsKey: 'sprockets',
@@ -43,36 +45,17 @@ SprocketsStatsWebpackPlugin.prototype.apply = function(compiler) {
 
   compiler.plugin('this-compilation', function(compilation) {
     compilation.plugin('optimize-assets', function(assets, callback) {
-      Object.keys(assets).forEach(function(file) {
-        var asset;
-        var content;
+      var digestAndSizeMap = getDigestAndSizeForAssets(assets, blacklistRegex);
 
-        if (!file.match(blacklistRegex)) {
-          asset = assets[file];
-          content = asset.source();
-
-          if (sprockets[file]) {
-            sprockets[file].size = asset.size();
-            sprockets[file].digest = crypto.createHash('md5').update(content).digest('hex');
-          } else {
-            sprockets[file] = {
-              size: asset.size(),
-              digest: crypto.createHash('md5').update(content).digest('hex')
-            };
-          }
-        }
-      });
+      sprockets = _merge({}, sprockets, digestAndSizeMap);
 
       callback();
     });
 
     compilation.plugin('module-asset', function(mod, filename) {
-      var logicalPath = path.relative(sourceAssetsPath, mod.userRequest);
-      var filenameKey = Object.keys(mod.assets).slice(-1)[0];
+      var logicalPathMap = getLogicalPathForAssets(sourceAssetsPath, mod.userRequest, mod.assets);
 
-      sprockets[filenameKey] = {
-        logical_path: logicalPath
-      };
+      sprockets = _merge({}, sprockets, logicalPathMap);
     });
   });
 
